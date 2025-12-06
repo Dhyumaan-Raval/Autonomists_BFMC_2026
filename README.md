@@ -1,2 +1,55 @@
-# Bosch_Future_Mobility_Challenge
-Official repository for our team’s project submitted to Bosch Future Mobility Challenge (BFMC). Contains autonomous driving algorithms, perception modules, controls, simulations, hardware integration, and full system documentation developed by Team Autonomists
+# 🚗 Bosch Future Mobility Challenge (BFMC) — Team Autonomists
+
+Welcome to the official repository of **Team Autonomists** for the **Bosch Future Mobility Challenge (BFMC)**.  
+This repository will contain all software, documentation, and development work as we build and program an autonomous 1:10 scale vehicle for the competition.
+
+---
+
+## 🏁 About the Bosch Future Mobility Challenge (BFMC)
+
+The **Bosch Future Mobility Challenge** is an international autonomous-driving competition organized by **Bosch Engineering Center Cluj**.  
+University teams from around the world develop software for a 1:10 scale autonomous car capable of:
+
+- Following lanes  
+- Recognizing traffic signs  
+- Navigating intersections  
+- Avoiding obstacles  
+- Performing parking maneuvers  
+- Communicating with infrastructure (V2I)  
+
+The challenge simulates real-world autonomous driving tasks, pushing teams to work on **perception**, **planning**, **control**, and **communication** systems.
+
+---
+
+## 🎯 Purpose of This Repository
+
+Since we are in the **initial stage**, this repository currently serves as:
+
+- A starting point for our BFMC project  
+- A place to document our progress and planning  
+- A foundation for future modules and code  
+- A collaborative workspace for Team Autonomists  
+
+As development progresses, this repository will include:
+
+- Perception modules (lane detection, traffic sign recognition)  
+- Planning and decision-making algorithms  
+- Control systems (PID/MPC)  
+- Simulation environments  
+- BFMC hardware integration  
+
+---
+
+## 👨‍💻 Team Autonomists
+
+| Name | Role |
+|------|------|
+| Dhyumaan Raval |  |
+| Harshid Rawal |  |
+| Saumy Patel | |
+| Chintan Trivedi |  |
+| Meet Jain |  |
+
+_(Team member roles will be updated as development progresses.)_
+
+---
