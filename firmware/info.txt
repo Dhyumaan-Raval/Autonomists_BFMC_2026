@@ -1,0 +1,2 @@
+a branch where the firmware for the stm32 will be stored 
+it mainly contians the codes for navigation of the car using sensors like bno, encoder, and us-100
