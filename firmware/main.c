@@ -18,10 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <stdio.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,36 +57,31 @@ typedef enum {
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
-
+IWDG_HandleTypeDef hiwdg;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
-
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+uint32_t park_wait_tick = 0;
+uint8_t gap_counter = 0;
 float current_setpoint = 0;
 #define ACCEL_STEP 2.5f
-
 uint32_t blinker_tick = 0;
-
 uint8_t rpi_rx_buffer[9];
 uint32_t last_rpi_tick = 0;
 uint8_t us100_buffer[2];
 uint16_t distance_mm = 0;
 int32_t encoder_count = 9;
-
 float target_speed = 0;
 float target_angle = 0;
-
 PID_TypeDef motorPID = {1.2f, 0.5f, 0.01f, 1500.0f};
 ParkingState current_park_state = PARK_IDLE;
-
 float actual_speed = 0;
 uint32_t servo_pwm = 1500; // 1500 is center
 uint32_t motor_pwm = 1500; // Neutral
-
 float current_yaw = 0.0f;
 float start_yaw = 0;
 /* USER CODE END PV */
@@ -95,12 +89,13 @@ float start_yaw = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_USART2_UART_Init(void);
+static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_I2C1_Init(void);
+static void MX_USART2_UART_Init(void);
+static void MX_IWDG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -108,7 +103,7 @@ static void MX_I2C1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 float get_distance_mm() {
-    int16_t ticks = (int16_t)__HAL_TIM_GET_COUNTER(&htim2);
+    int32_t ticks = (int32_t)__HAL_TIM_GET_COUNTER(&htim2);
     return (ticks / 330.0f) * 204.2f; //circumference of wheel
 }
 
@@ -171,7 +166,7 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the S	ystick. */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -187,12 +182,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART2_UART_Init();
+  MX_I2C1_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM4_Init();
   MX_USART1_UART_Init();
-  MX_I2C1_Init();
+  MX_USART2_UART_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
@@ -200,6 +196,8 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim2,TIM_CHANNEL_ALL);
   HAL_UART_Receive_DMA(&huart1,rpi_rx_buffer,8);
   BNO055_Init();
+  
+  HAL_IWDG_Init(&hiwdg);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -231,10 +229,17 @@ int main(void)
                 target_angle = 0;      // Keep wheels straight
                 
                 // If the side sensor sees a gap larger than 500mm
-                if (distance_mm > 500) { 
-                    __HAL_TIM_SET_COUNTER(&htim2, 0); // Reset Odometry
-                    current_park_state = PARK_POSITIONING;
-                }
+                if (distance_mm > 500) {
+                      gap_counter++;
+                  } else {
+                      gap_counter = 0;
+                  }
+
+                  if (gap_counter > 5) { // 5 consecutive readings
+                      __HAL_TIM_SET_COUNTER(&htim2, 0);
+                      gap_counter = 0;
+                      current_park_state = PARK_POSITIONING;
+                  }
                 break;
 
             case PARK_POSITIONING:
@@ -242,7 +247,7 @@ int main(void)
                 if (get_distance_mm() > 300.0f) { 
                     target_speed = 0;
                     start_yaw = current_yaw;
-                    HAL_Delay(500); // Brief pause to settle
+                    park_wait_tick = HAL_GetTick();
                     current_park_state = PARK_REVERSING;
                 }
                 break;
@@ -250,7 +255,10 @@ int main(void)
             case PARK_REVERSING:
                 target_angle = -30.0f;  // Hard steer into the spot
                 target_speed = -100.0f; // Reverse slowly
-                
+                if (HAL_GetTick() - park_wait_tick < 500) {
+                  target_speed = 0;
+                  break;
+                }
                 // Calculate relative turn angle (handling 360 wrap-around)
                 float turned = current_yaw - start_yaw;
                 if (turned > 180)  turned -= 360; 
@@ -277,11 +285,11 @@ int main(void)
         // allowing the interrupts (DMA/Timers) to breathe.
         HAL_Delay(10);
 
-      /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-      /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
     }
-    /* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
@@ -301,9 +309,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 16;
@@ -365,6 +374,34 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief IWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
+
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
+
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+  hiwdg.Init.Reload = 1250;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
+
+  /* USER CODE END IWDG_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -389,7 +426,7 @@ static void MX_TIM1_Init(void)
   htim1.Init.Period = 19999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
@@ -401,7 +438,7 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 1500;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -461,11 +498,11 @@ static void MX_TIM2_Init(void)
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC1Filter = 0;
+  sConfig.IC1Filter = 5;
   sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC2Filter = 0;
+  sConfig.IC2Filter = 5;
   if (HAL_TIM_Encoder_Init(&htim2, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -635,16 +672,25 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
     if (htim->Instance == TIM4) {
-        
+      HAL_IWDG_Refresh(&hiwdg);
+        if (HAL_GetTick() - last_rpi_tick > 500 && current_park_state == PARK_IDLE) {
+          target_speed = 0;
+          current_setpoint = 0;
+        }
         // A. Speed Ramping (Anti-Jerk)
         if (current_setpoint < target_speed) current_setpoint += ACCEL_STEP;
         else if (current_setpoint > target_speed) current_setpoint -= ACCEL_STEP;
 
         // B. Odometry (Encoder Calculation)
-        int16_t ticks = (int16_t)__HAL_TIM_GET_COUNTER(&htim2);
+        int32_t ticks = (int32_t)__HAL_TIM_GET_COUNTER(&htim2);
         __HAL_TIM_SET_COUNTER(&htim2, 0);
-        actual_speed = (ticks / 330.0f) * 204.2f * 100.0f;
-
+        actual_speed = ((float)ticks / 330.0f) * 204.2f * 100.0f;
+        if (target_speed < 0) actual_speed = -actual_speed;
+        if (actual_speed - target_speed > 50) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET); // Brake ON
+        } else {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+        }
         // C. BFMC Safety Stop
         if (distance_mm < 150 && target_speed > 0) {
             target_speed = 0; 
@@ -661,6 +707,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
         __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, motor_pwm);
 
         // E. Servo & BFMC Signaling (Blinkers/Brakes)
+        if (target_angle > 30.0f) target_angle = 30.0f;
+        if (target_angle < -30.0f) target_angle = -30.0f;
         __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 1500 + (target_angle * 16.6f));
         
         blinker_tick++;
@@ -671,23 +719,40 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
     }
 }
 
+/* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    if(huart->Instance == USART1) { // Data from Raspberry Pi
-        // Ensure the buffer is a valid C-string for sscanf
+
+    /* ---------- US-100 Ultrasonic ---------- */
+    if (huart->Instance == USART2) {
+        distance_mm = (us100_buffer[0] << 8) | us100_buffer[1];
+        if (distance_mm == 0 || distance_mm > 3000) {
+            distance_mm = 3000; // treat as "no obstacle"
+        }
+        // Restart RX for next trigger
+        HAL_UART_Receive_IT(&huart2, us100_buffer, 2);
+    }
+
+    /* ---------- Raspberry Pi ---------- */
+    if (huart->Instance == USART1) {
         rpi_rx_buffer[8] = '\0';
 
-        // THE MISSING PIECE: Actually update the targets!
-        sscanf((char*)rpi_rx_buffer, "S%fA%f", &target_speed, &target_angle);
+        if (rpi_rx_buffer[0] == 'A') {
+            sscanf((char*)rpi_rx_buffer, "A%f", &target_angle);
+        }
+        else if (rpi_rx_buffer[0] == 'P') {
+            current_park_state = PARK_SEARCHING;
+        }
+        else if (rpi_rx_buffer[0] == 'E') {
+            target_speed = 0;
+            current_setpoint = 0;
+        }
 
         last_rpi_tick = HAL_GetTick();
-        HAL_UART_Receive_DMA(&huart1, rpi_rx_buffer, 8); // Restart DMA
-    }
-    
-    if(huart->Instance == USART2) { // Data from US-100
-        distance_mm = (us100_buffer[0] << 8) | us100_buffer[1];
+        HAL_UART_Receive_DMA(&huart1, rpi_rx_buffer, 8);
     }
 }
 /* USER CODE END 4 */
+
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
