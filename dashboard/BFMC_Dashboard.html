@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomists HUD — Bosch Mobility Challenge</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+
+<style>
+/* ─── COLOR PALETTE ───────────────────────────────────────────────────── */
+:root {
+  --cyan:       #00f0ff;   /* primary accent */
+  --cyan-dim:   #008fa8;   /* muted cyan */
+  --green:      #00ff88;   /* good / safe */
+  --green-dim:  #009950;
+  --orange:     #ff7700;
+  --yellow:     #ffe100;   /* warning */
+  --red:        #ff2255;   /* danger / stop */
+  --bg:         #020d14;   /* main background */
+  --panel:      rgba(0,18,30,0.88);
+  --border:     rgba(0,240,255,0.18);
+  --border-dim: rgba(0,240,255,0.08);
+}
+
+/* ─── RESET & BASE ────────────────────────────────────────────────────── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  font-family: 'Barlow Condensed', sans-serif;
+  color: var(--cyan);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* CRT scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent, transparent 3px,
+    rgba(0,240,255,.012) 3px, rgba(0,240,255,.012) 4px
+  );
+}
+
+/* Dot grid background */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(rgba(0,240,255,.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ─── PANEL BASE ──────────────────────────────────────────────────────── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  padding: 8px 10px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(6px);
+}
+/* glowing top edge on every panel */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: .4;
+}
+
+/* Panel title bar */
+.panel-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: rgba(0,240,255,.4);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.panel-title::before { content: '▸'; color: var(--cyan); font-size: 8px; }
+
+/* ─── TOP HEADER BAR ──────────────────────────────────────────────────── */
+#header {
+  position: relative;
+  z-index: 10;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: linear-gradient(90deg,
+    rgba(0,240,255,.10),
+    rgba(0,240,255,.03) 50%,
+    rgba(0,240,255,.10)
+  );
+  border-bottom: 1px solid var(--border);
+}
+
+.header-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: var(--cyan);
+  text-shadow: 0 0 14px rgba(0,240,255,.7), 0 0 40px rgba(0,240,255,.25);
+  animation: titleGlow 4s ease-in-out infinite;
+}
+@keyframes titleGlow {
+  0%,100% { text-shadow: 0 0 14px rgba(0,240,255,.7), 0 0 40px rgba(0,240,255,.25); }
+  50%     { text-shadow: 0 0 22px rgba(0,240,255,1),  0 0 60px rgba(0,240,255,.4);  }
+}
+.header-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: rgba(0,240,255,.35);
+  letter-spacing: 3px;
+  margin-top: 2px;
+}
+
+/* Clock (center) */
+#sysTime {
+  font-family: 'Orbitron', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--green);
+  text-shadow: 0 0 10px rgba(0,255,136,.6);
+  letter-spacing: 2px;
+}
+
+/* Connection status badge */
+.conn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  border: 1px solid;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  margin-top: 3px;
+}
+.conn-badge.waiting      { border-color: rgba(0,240,255,.3);  color: rgba(0,240,255,.5);  background: rgba(0,240,255,.04); }
+.conn-badge.connected    { border-color: var(--green);         color: var(--green);         background: rgba(0,255,136,.06); }
+.conn-badge.disconnected { border-color: var(--red);           color: var(--red);           background: rgba(255,34,85,.06); }
+
+/* Blinking dot */
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: blink 1.2s ease-in-out infinite;
+}
+.dot.cyan  { background: var(--cyan);  box-shadow: 0 0 6px var(--cyan); }
+.dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot.red   { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+@keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.2; } }
+
+/* ─── MAIN GRID LAYOUT ────────────────────────────────────────────────── */
+/*
+  Layout:  [LEFT col] [CENTER camera] [RIGHT col]
+           [LEFT col] [BOTTOM stats ] [RIGHT col]
+*/
+#grid {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 260px 1fr 260px;
+  grid-template-rows: 1fr 160px;
+  gap: 6px;
+  padding: 6px;
+  height: calc(100vh - 42px - 42px);   /* subtract header + footer */
+}
+
+/* ─── LEFT COLUMN ─────────────────────────────────────────────────────── */
+#left {
+  grid-column: 1;
+  grid-row: 1 / 3;      /* spans both rows */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* --- Battery panel --- */
+.batt-number {
+  font-family: 'Orbitron', monospace;
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--green);
+  text-shadow: 0 0 14px rgba(0,255,136,.6);
+}
+.batt-track {
+  height: 8px;
+  background: rgba(0,255,136,.08);
+  border: 1px solid rgba(0,255,136,.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 6px 0 4px;
+}
+.batt-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green-dim), var(--green));
+  box-shadow: 0 0 8px var(--green);
+  transition: width 1s ease;
+}
+.batt-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: rgba(0,255,136,.4);
+}
+.batt-cells {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 5px;
+}
+.batt-cell {
+  background: rgba(0,240,255,.03);
+  border: 1px solid rgba(0,240,255,.1);
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+.batt-cell-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  color: rgba(0,240,255,.35);
+  letter-spacing: 1px;
+}
+.batt-cell-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+/* --- IMU panel --- */
+.imu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.imu-cell {
+  background: rgba(0,240,255,.03);
+  border: 1px solid rgba(0,240,255,.1);
+  border-radius: 3px;
+  padding: 5px 7px;
+}
+.imu-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  color: rgba(0,240,255,.38);
+  letter-spacing: 1.5px;
+}
+.imu-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0,240,255,.4);
+}
+.imu-unit { font-size: 8px; color: rgba(0,240,255,.28); }
+
+/* --- GPS panel --- */
+.gps-map {
+  height: 90px;
+  background: rgba(0,15,30,.7);
+  border: 1px solid rgba(0,240,255,.12);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+.gps-grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,240,255,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,.07) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.gps-car-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--cyan), 0 0 24px rgba(0,240,255,.3);
+  transform: translate(-50%, -50%);
+  transition: left 1s linear, top 1s linear;
+}
+.gps-car-dot::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 1px solid rgba(0,240,255,.35);
+  border-radius: 50%;
+  animation: radarPulse 2s ease-out infinite;
+}
+@keyframes radarPulse {
+  0%   { transform: scale(.6); opacity: .8; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.gps-coords {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  line-height: 1.7;
+  color: rgba(0,240,255,.4);
+}
+.gps-coords span { color: var(--cyan); font-weight: 700; }
+
+/* --- Ultrasonic sensors panel --- */
+.ultra-ring {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 90px;
+  margin-bottom: 4px;
+  position: relative;
+}
+.ultra-car-icon {
+  width: 32px;
+  height: 48px;
+  background: rgba(0,240,255,.08);
+  border: 1px solid rgba(0,240,255,.3);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  position: relative;
+}
+/* Each badge floats around the car icon */
+.ultra-badge {
+  position: absolute;
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 2px;
+  border: 1px solid;
+  transition: all .4s;
+}
+.ultra-badge.top    { top: -22px;  left: 50%;  transform: translateX(-50%); }
+.ultra-badge.bottom { bottom:-22px;left: 50%;  transform: translateX(-50%); }
+.ultra-badge.left   { left: -46px; top: 50%;   transform: translateY(-50%); }
+.ultra-badge.right  { right:-46px; top: 50%;   transform: translateY(-50%); }
+
+.ultra-badge.safe   { color: var(--green); border-color: rgba(0,255,136,.3); background: rgba(0,255,136,.06); }
+.ultra-badge.warn   { color: var(--yellow);border-color: rgba(255,225,0,.3); background: rgba(255,225,0,.06); }
+.ultra-badge.danger { color: var(--red);   border-color: rgba(255,34,85,.4); background: rgba(255,34,85,.08); animation: blink .4s ease-in-out infinite; }
+
+/* ─── CENTER — CAMERA FEED ────────────────────────────────────────────── */
+#cam {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+}
+
+.cam-feed {
+  width: 100%;
+  height: calc(100% - 24px);
+  background: #000;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0,240,255,.15);
+}
+
+/* Shown when no stream is connected */
+.cam-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #050f18 0%, #0a1a0a 100%);
+}
+.cam-placeholder-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: rgba(0,240,255,.3);
+  letter-spacing: 3px;
+  text-align: center;
+  line-height: 2;
+}
+
+/* YOLO bounding boxes drawn on top of camera */
+#yoloCanvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* HUD corner brackets */
+.hud-corner { position: absolute; width: 18px; height: 18px; }
+.hud-corner.tl { top:6px;    left:6px;  border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+.hud-corner.tr { top:6px;    right:6px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+.hud-corner.bl { bottom:6px; left:6px;  border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+.hud-corner.br { bottom:6px; right:6px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+
+/* Animated scan line on camera */
+.cam-scan {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,240,255,.5), transparent);
+  animation: camScan 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes camScan { 0% { top:0; opacity:.6; } 100% { top:100%; opacity:0; } }
+
+.rec-badge {
+  position: absolute;
+  top: 8px; right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--red);
+  letter-spacing: 2px;
+}
+.cam-info-bar {
+  position: absolute;
+  bottom: 6px; left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: rgba(0,240,255,.35);
+  letter-spacing: 1px;
+}
+
+/* ─── CENTER — BOTTOM ROW (Speed / Steer / Offset) ───────────────────── */
+#cbot {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+/* Speedometer */
+.speedo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100% - 24px);
+  position: relative;
+}
+#speedoSvg { width: 140px; }
+.speedo-number {
+  position: absolute;
+  font-family: 'Orbitron', monospace;
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--cyan);
+  text-shadow: 0 0 14px rgba(0,240,255,.7);
+  top: 30%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  line-height: 1;
+}
+.speedo-unit {
+  font-size: 10px;
+  color: rgba(0,240,255,.4);
+  letter-spacing: 3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 300;
+}
+
+/* Steering wheel */
+.steer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100% - 24px);
+  gap: 4px;
+}
+#steerSvg { width: 90px; height: 90px; }
+.steer-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(0,240,255,.5);
+}
+.steer-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  color: rgba(0,240,255,.35);
+  letter-spacing: 2px;
+}
+
+/* Lane offset + klem + mode */
+.okm-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  height: calc(100% - 16px);
+}
+.offset-box {
+  flex: 1;
+  background: rgba(0,240,255,.03);
+  border: 1px solid rgba(0,240,255,.12);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+.offset-number {
+  font-family: 'Orbitron', monospace;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--yellow);
+  text-shadow: 0 0 10px rgba(255,225,0,.5);
+  text-align: center;
+}
+.offset-track {
+  height: 5px;
+  background: rgba(255,225,0,.08);
+  border: 1px solid rgba(255,225,0,.18);
+  border-radius: 2px;
+  position: relative;
+  margin: 4px 0;
+}
+.offset-centerline {
+  position: absolute;
+  left: 50%; top: -3px; bottom: -3px;
+  width: 1px;
+  background: rgba(255,225,0,.3);
+}
+.offset-pin {
+  position: absolute;
+  top: -3px; bottom: -3px;
+  width: 5px;
+  background: var(--yellow);
+  box-shadow: 0 0 6px var(--yellow);
+  border-radius: 2px;
+  transform: translateX(-50%);
+  transition: left .5s ease;
+}
+.offset-ends {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 7px;
+  color: rgba(255,225,0,.3);
+}
+
+/* Klem buttons (electrical relay state) */
+.klem-row { display: flex; gap: 4px; }
+.klem-btn {
+  flex: 1;
+  padding: 5px 2px;
+  text-align: center;
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid rgba(0,240,255,.12);
+  color: rgba(0,240,255,.2);
+  background: transparent;
+  letter-spacing: 2px;
+  transition: all .3s;
+}
+.klem-btn.on {
+  background: rgba(0,240,255,.1);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: inset 0 0 10px rgba(0,240,255,.1), 0 0 8px rgba(0,240,255,.2);
+}
+
+/* Drive mode buttons */
+.mode-row { display: flex; gap: 4px; }
+.mode-btn {
+  flex: 1;
+  padding: 5px 2px;
+  text-align: center;
+  font-family: 'Orbitron', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid rgba(0,240,255,.08);
+  color: rgba(0,240,255,.18);
+  background: transparent;
+  letter-spacing: 1px;
+  transition: all .3s;
+}
+.mode-btn.stop.on   { background: rgba(255,34,85,.12); border-color: var(--red);    color: var(--red); }
+.mode-btn.manual.on { background: rgba(255,225,0,.10); border-color: var(--yellow); color: var(--yellow); }
+.mode-btn.auto.on   { background: rgba(0,255,136,.10); border-color: var(--green);  color: var(--green); }
+
+/* ─── RIGHT COLUMN ────────────────────────────────────────────────────── */
+#right {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* YOLO detection list */
+.yolo-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,240,255,.07);
+  background: rgba(0,240,255,.02);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  margin-bottom: 3px;
+  transition: border-color .3s;
+}
+.yolo-row:hover { border-color: rgba(0,240,255,.2); }
+.yolo-class { color: var(--cyan-dim); letter-spacing: 1px; flex: 1; }
+.yolo-dist  { color: rgba(0,240,255,.35); font-size: 9px; }
+.yolo-conf  { padding: 1px 5px; border-radius: 2px; font-weight: 700; border: 1px solid; }
+.yolo-conf.hi { color: var(--green);  border-color: rgba(0,255,136,.25); background: rgba(0,255,136,.08); }
+.yolo-conf.md { color: var(--yellow); border-color: rgba(255,225,0,.25); background: rgba(255,225,0,.08); }
+.yolo-conf.lo { color: var(--red);    border-color: rgba(255,34,85,.25); background: rgba(255,34,85,.08); }
+
+/* Traffic light */
+.sig-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.sig-pole {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: rgba(0,0,0,.5);
+  padding: 7px 5px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.sig-bulb {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.08);
+  opacity: .15;
+}
+.sig-bulb.red-bulb    { background: #ff2255; }
+.sig-bulb.yellow-bulb { background: #ffe100; }
+.sig-bulb.green-bulb  { background: #00ff88; }
+.sig-bulb.on { opacity: 1; }
+.sig-bulb.red-bulb.on    { box-shadow: 0 0 14px rgba(255,34,85,.9); }
+.sig-bulb.yellow-bulb.on { box-shadow: 0 0 14px rgba(255,225,0,.9); }
+.sig-bulb.green-bulb.on  { box-shadow: 0 0 14px rgba(0,255,136,.9); animation: sigPulse 1s ease-in-out infinite; }
+@keyframes sigPulse { 0%,100% { opacity:1; } 50% { opacity:.7; } }
+
+.sig-state {
+  font-family: 'Orbitron', monospace;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+.sig-timer { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: rgba(0,240,255,.4); margin-top: 2px; }
+.sig-sem   { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: rgba(0,240,255,.28); margin-top: 3px; letter-spacing: 1px; }
+
+/* V2X messages */
+.v2x-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,240,255,.07);
+  background: rgba(0,240,255,.02);
+  margin-bottom: 4px;
+  animation: v2xPulse 3s ease-in-out infinite;
+}
+@keyframes v2xPulse { 0%,100% { border-color: rgba(0,240,255,.07); } 50% { border-color: rgba(0,240,255,.25); } }
+.v2x-icon {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--cyan-dim);
+  background: rgba(0,240,255,.05);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.v2x-type    { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: rgba(0,240,255,.35); letter-spacing: 1px; }
+.v2x-message { font-size: 11px; font-weight: 600; color: var(--cyan); letter-spacing: .3px; }
+.v2x-rssi    { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: rgba(0,255,136,.5); }
+
+/* ─── BOTTOM STATUS BAR ───────────────────────────────────────────────── */
+#footer {
+  position: relative;
+  z-index: 10;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 0;
+  background: linear-gradient(90deg,
+    rgba(0,240,255,.07),
+    rgba(0,240,255,.02) 50%,
+    rgba(0,240,255,.07)
+  );
+  border-top: 1px solid var(--border-dim);
+}
+
+/* Each bottom stat cell */
+.footer-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 14px;
+}
+.footer-stat-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 7.5px;
+  color: rgba(0,240,255,.3);
+  letter-spacing: 2px;
+}
+.footer-stat-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: 0 0 6px rgba(0,240,255,.4);
+  letter-spacing: 1px;
+}
+.footer-divider {
+  width: 1px;
+  height: 26px;
+  background: var(--border-dim);
+}
+
+/* System health mini-bars */
+.health-block {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 14px;
+}
+.health-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.health-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 7px;
+  color: rgba(0,240,255,.28);
+  letter-spacing: 1px;
+}
+.health-bar {
+  width: 34px; height: 3px;
+  background: rgba(0,255,136,.08);
+  border: 1px solid rgba(0,255,136,.2);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.health-bar-fill {
+  height: 100%;
+  background: var(--green);
+  box-shadow: 0 0 3px var(--green);
+  transition: width .8s ease;
+}
+
+.ws-info {
+  margin-left: auto;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  color: rgba(0,240,255,.25);
+  letter-spacing: 1px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+::-webkit-scrollbar { display: none; }
+</style>
+</head>
+
+<body>
+
+<!-- ═══════════════════ TOP HEADER ════════════════════════════════════ -->
+<div id="header">
+  <div>
+    <div class="header-title">⬡ AUTONOMISTS HUD</div>
+    <div class="header-sub">BOSCH MOBILITY CHALLENGE · DDU EC · AV CONTROL SYSTEM</div>
+  </div>
+  <div style="text-align:center;">
+    <div id="sysTime">00:00:00</div>
+    <div id="connBadge" class="conn-badge waiting">
+      <div class="dot cyan"></div>
+      <span id="connText">WAITING FOR CAR</span>
+    </div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:var(--cyan-dim);letter-spacing:3px;">BOSCH MOBILITY</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,240,255,.3);letter-spacing:2px;margin-top:2px;">VCU NODE-4 · v2.0</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MAIN GRID ════════════════════════════════════ -->
+<div id="grid">
+
+  <!-- ────────────────── LEFT COLUMN ───────────────────────────── -->
+  <div id="left">
+
+    <!-- BATTERY -->
+    <div class="panel">
+      <div class="panel-title">Battery Status</div>
+      <div style="display:flex;align-items:baseline;gap:6px;">
+        <div class="batt-number" id="battPct">0</div>
+        <div style="font-size:14px;color:rgba(0,255,136,.4);letter-spacing:2px;">%</div>
+      </div>
+      <div class="batt-track">
+        <div class="batt-fill" id="battBar" style="width:0%"></div>
+      </div>
+      <div class="batt-row">
+        <span id="battVolt">-- V · -- Ah</span>
+        <span id="battEst">EST -- min</span>
+      </div>
+      <div class="batt-cells">
+        <div class="batt-cell">
+          <div class="batt-cell-label">CURRENT</div>
+          <div class="batt-cell-value" id="battCurr">-- A</div>
+        </div>
+        <div class="batt-cell">
+          <div class="batt-cell-label">TEMP</div>
+          <div class="batt-cell-value" id="battTemp">-- °C</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMU -->
+    <div class="panel">
+      <div class="panel-title">IMU Readings</div>
+      <div class="imu-grid">
+        <div class="imu-cell"><div class="imu-label">ACCEL X</div><div class="imu-value" id="iAx">--<span class="imu-unit"> g</span></div></div>
+        <div class="imu-cell"><div class="imu-label">ACCEL Y</div><div class="imu-value" id="iAy">--<span class="imu-unit"> g</span></div></div>
+        <div class="imu-cell"><div class="imu-label">GYRO Z</div> <div class="imu-value" id="iGz">--<span class="imu-unit"> °/s</span></div></div>
+        <div class="imu-cell"><div class="imu-label">PITCH</div>  <div class="imu-value" id="iPitch">--<span class="imu-unit"> °</span></div></div>
+        <div class="imu-cell"><div class="imu-label">ROLL</div>   <div class="imu-value" id="iRoll">--<span class="imu-unit"> °</span></div></div>
+        <div class="imu-cell"><div class="imu-label">YAW</div>    <div class="imu-value" id="iYaw">--<span class="imu-unit"> °</span></div></div>
+      </div>
+    </div>
+
+    <!-- GPS -->
+    <div class="panel" style="flex:1;">
+      <div class="panel-title">GPS Location</div>
+      <div class="gps-map">
+        <div class="gps-grid-bg"></div>
+        <svg id="gpsSvg" style="position:absolute;inset:0;" width="100%" height="100%">
+          <polyline id="gpsTrail" points="" fill="none"
+            stroke="rgba(0,255,136,.4)" stroke-width="1.5" stroke-dasharray="4,3"/>
+        </svg>
+        <div class="gps-car-dot" id="gpsCar" style="left:50%;top:50%;"></div>
+      </div>
+      <div class="gps-coords">
+        LAT <span id="gpsLat">--°</span> &nbsp;
+        LNG <span id="gpsLng">--°</span><br>
+        ALT <span id="gpsAlt">-- m</span> &nbsp;
+        SATS <span id="gpsSats">--</span> &nbsp;
+        HDOP <span id="gpsHdop">--</span>
+      </div>
+    </div>
+
+    <!-- ULTRASONIC SENSORS -->
+    <div class="panel">
+      <div class="panel-title">Ultrasonic Sensors · cm</div>
+      <div class="ultra-ring">
+        <div class="ultra-car-icon">🚗
+          <div class="ultra-badge top   safe" id="uFront">--</div>
+          <div class="ultra-badge bottom safe" id="uRear">--</div>
+          <div class="ultra-badge left  safe" id="uLeft">--</div>
+          <div class="ultra-badge right safe" id="uRight">--</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end #left -->
+
+  <!-- ────────────────── CENTER CAMERA ─────────────────────────── -->
+  <div class="panel" id="cam">
+    <div class="panel-title">Camera Feed · YOLO Object Detection</div>
+    <div class="cam-feed" id="camFeed">
+
+      <!-- shown when no video stream -->
+      <div class="cam-placeholder" id="camPlaceholder">
+        <div class="cam-placeholder-text">
+          📷 CAMERA FEED<br>
+          CONNECT WS · <span style="color:rgba(0,240,255,.5);" id="wsUrlDisplay">ws://YOUR_CAR_IP:PORT</span><br>
+          <span style="color:rgba(0,240,255,.18);font-size:9px;">waiting for WebSocket data...</span>
+        </div>
+      </div>
+
+      <!-- YOLO boxes drawn here on top of video -->
+      <canvas id="yoloCanvas"></canvas>
+
+      <!-- cosmetic HUD corners -->
+      <div class="hud-corner tl"></div>
+      <div class="hud-corner tr"></div>
+      <div class="hud-corner bl"></div>
+      <div class="hud-corner br"></div>
+      <div class="cam-scan"></div>
+
+      <div class="rec-badge"><div class="dot red"></div>REC · LIVE</div>
+      <div class="cam-info-bar">
+        <span>CAM-01 · FRONT 120° · 1080p</span>
+        <span id="camFps">-- FPS</span>
+        <span id="camLatency">-- ms</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────────────── CENTER BOTTOM: Speed / Steer / Offset ── -->
+  <div id="cbot">
+
+    <!-- SPEEDOMETER -->
+    <div class="panel">
+      <div class="panel-title">Speedometer</div>
+      <div class="speedo-wrap">
+        <svg id="speedoSvg" viewBox="0 0 160 100" fill="none">
+          <!-- background track (full arc) -->
+          <path d="M18 90 A62 62 0 0 1 142 90"
+            stroke="rgba(0,240,255,.08)" stroke-width="10" stroke-linecap="round" fill="none"/>
+          <!-- red zone highlight (top-right portion) -->
+          <path d="M105 28 A62 62 0 0 1 142 90"
+            stroke="rgba(255,34,85,.15)" stroke-width="10" stroke-linecap="round" fill="none"/>
+          <!-- live speed arc (updated by setSpeed) -->
+          <path id="speedArc" d="M18 90 A62 62 0 0 1 18 90"
+            stroke="url(#speedGrad)" stroke-width="10" stroke-linecap="round" fill="none"/>
+          <!-- tick marks -->
+          <g stroke="rgba(0,240,255,.3)" stroke-width="1.5">
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(-180,80,90)"/>
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(-150,80,90)"/>
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(-120,80,90)"/>
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(-90,80,90)"/>
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(-60,80,90)"/>
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(-30,80,90)"/>
+            <line x1="18" y1="90" x2="24" y2="87" transform="rotate(0,80,90)"/>
+          </g>
+          <!-- scale labels -->
+          <text x="14"  y="96" fill="rgba(0,240,255,.3)" font-size="7" font-family="Orbitron,monospace">0</text>
+          <text x="72"  y="20" fill="rgba(0,240,255,.3)" font-size="7" font-family="Orbitron,monospace" text-anchor="middle">50</text>
+          <text x="140" y="96" fill="rgba(0,240,255,.3)" font-size="7" font-family="Orbitron,monospace" text-anchor="end">100</text>
+          <defs>
+            <linearGradient id="speedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stop-color="#008fa8"/>
+              <stop offset="100%" stop-color="#00f0ff"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="speedo-number">
+          <span id="speedVal">0</span>
+          <div class="speedo-unit">km/h</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEERING WHEEL -->
+    <div class="panel">
+      <div class="panel-title">Steering Angle</div>
+      <div class="steer-wrap">
+        <svg id="steerSvg" viewBox="0 0 100 100" fill="none">
+          <!-- outer ring -->
+          <circle cx="50" cy="50" r="43" stroke="rgba(0,240,255,.5)" stroke-width="5" fill="none"/>
+          <!-- hub -->
+          <circle cx="50" cy="50" r="14" stroke="rgba(0,240,255,.35)" stroke-width="3" fill="rgba(0,240,255,.04)"/>
+          <!-- spokes -->
+          <line x1="50" y1="36" x2="50" y2="8"  stroke="rgba(0,240,255,.65)" stroke-width="4.5" stroke-linecap="round"/>
+          <line x1="50" y1="64" x2="20" y2="78" stroke="rgba(0,240,255,.65)" stroke-width="4.5" stroke-linecap="round"/>
+          <line x1="50" y1="64" x2="80" y2="78" stroke="rgba(0,240,255,.65)" stroke-width="4.5" stroke-linecap="round"/>
+          <!-- center dot -->
+          <circle cx="50" cy="50" r="5" fill="var(--cyan)" opacity=".7"/>
+          <!-- top marker (shows rotation) -->
+          <circle cx="50" cy="9"  r="3.5" fill="var(--green)" opacity=".9"/>
+        </svg>
+        <div class="steer-value" id="steerVal">0°</div>
+        <div class="steer-label">STEERING ANGLE</div>
+      </div>
+    </div>
+
+    <!-- LANE OFFSET + KLEM + MODE -->
+    <div class="panel">
+      <div class="panel-title">Offset · Klem · Mode</div>
+      <div class="okm-stack">
+
+        <!-- Lane offset -->
+        <div class="offset-box">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(255,225,0,.35);letter-spacing:2px;margin-bottom:2px;">LANE OFFSET</div>
+          <div class="offset-number" id="offsetVal">0 cm</div>
+          <div class="offset-track">
+            <div class="offset-centerline"></div>
+            <div class="offset-pin" id="offsetPin" style="left:50%"></div>
+          </div>
+          <div class="offset-ends">
+            <span>◄ LEFT</span><span>CENTER</span><span>RIGHT ►</span>
+          </div>
+        </div>
+
+        <!-- Klem status (car electrical relays: 0=off, 15=ignition, 30=engine) -->
+        <div>
+          <div class="panel-title" style="margin-bottom:4px;">Klem Status</div>
+          <div class="klem-row">
+            <div class="klem-btn" id="klem0">0</div>
+            <div class="klem-btn" id="klem15">15</div>
+            <div class="klem-btn" id="klem30">30</div>
+          </div>
+        </div>
+
+        <!-- Drive mode -->
+        <div>
+          <div class="panel-title" style="margin-bottom:4px;">Drive Mode</div>
+          <div class="mode-row">
+            <div class="mode-btn stop"   id="modeStop">STOP</div>
+            <div class="mode-btn manual" id="modeManual">MANUAL</div>
+            <div class="mode-btn auto"   id="modeAuto">AUTO</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end #cbot -->
+
+  <!-- ────────────────── RIGHT COLUMN ──────────────────────────── -->
+  <div id="right">
+
+    <!-- YOLO DETECTION LIST -->
+    <div class="panel" style="flex:0 0 auto;">
+      <div class="panel-title">YOLO · Detected Objects</div>
+      <div id="yoloList">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,240,255,.2);letter-spacing:2px;padding:6px 0;">
+          NO DETECTIONS YET
+        </div>
+      </div>
+    </div>
+
+    <!-- TRAFFIC LIGHT -->
+    <div class="panel" style="flex:0 0 auto;">
+      <div class="panel-title">Traffic Signal · Semaphore</div>
+      <div class="sig-wrap">
+        <div class="sig-pole">
+          <div class="sig-bulb red-bulb"    id="sigRed"></div>
+          <div class="sig-bulb yellow-bulb" id="sigYellow"></div>
+          <div class="sig-bulb green-bulb"  id="sigGreen"></div>
+        </div>
+        <div>
+          <div class="sig-state" id="sigState" style="color:rgba(0,240,255,.25);">WAITING</div>
+          <div class="sig-timer" id="sigTimer">⏱ -- s</div>
+          <div class="sig-sem"   id="sigSem">SEM: --</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,240,255,.25);margin-top:3px;" id="sigDist">-- m</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V2X MESSAGES -->
+    <div class="panel" style="flex:1;">
+      <div class="panel-title">V2X · Vehicle to Everything</div>
+
+      <div class="v2x-row">
+        <div class="v2x-icon">🚦</div>
+        <div style="flex:1;">
+          <div class="v2x-type">V2I · INTERSECTION</div>
+          <div class="v2x-message" id="v2xSig">--</div>
+        </div>
+        <div class="v2x-rssi" id="v2xSigRssi">--</div>
+      </div>
+
+      <div class="v2x-row" style="animation-delay:.8s">
+        <div class="v2x-icon">🚗</div>
+        <div style="flex:1;">
+          <div class="v2x-type">V2V · VEHICLE</div>
+          <div class="v2x-message" id="v2xVeh">--</div>
+        </div>
+        <div class="v2x-rssi">--</div>
+      </div>
+
+      <div class="v2x-row" style="animation-delay:1.6s">
+        <div class="v2x-icon">📡</div>
+        <div style="flex:1;">
+          <div class="v2x-type">V2N · NETWORK</div>
+          <div class="v2x-message" id="v2xNet">--</div>
+        </div>
+        <div class="v2x-rssi">--</div>
+      </div>
+
+      <div class="v2x-row" style="animation-delay:2.4s">
+        <div class="v2x-icon">🏗️</div>
+        <div style="flex:1;">
+          <div class="v2x-type">V2I · INFRA</div>
+          <div class="v2x-message" id="v2xInfra">--</div>
+        </div>
+        <div class="v2x-rssi">--</div>
+      </div>
+    </div>
+
+  </div><!-- end #right -->
+
+</div><!-- end #grid -->
+
+<!-- ═══════════════════ BOTTOM FOOTER BAR ════════════════════════════ -->
+<div id="footer">
+  <div class="footer-stat">
+    <div class="footer-stat-label">SPEED</div>
+    <div class="footer-stat-value" id="ftSpeed">0 km/h</div>
+  </div>
+  <div class="footer-divider"></div>
+  <div class="footer-stat">
+    <div class="footer-stat-label">HEADING</div>
+    <div class="footer-stat-value" id="ftHeading">--°</div>
+  </div>
+  <div class="footer-divider"></div>
+  <div class="footer-stat">
+    <div class="footer-stat-label">DISTANCE</div>
+    <div class="footer-stat-value" id="ftDist">0.00 km</div>
+  </div>
+  <div class="footer-divider"></div>
+  <div class="footer-stat">
+    <div class="footer-stat-label">UPTIME</div>
+    <div class="footer-stat-value" id="ftUptime">00:00:00</div>
+  </div>
+  <div class="footer-divider"></div>
+
+  <!-- System health bars -->
+  <div class="health-block">
+    <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:2px;color:rgba(0,240,255,.3);">SYS</div>
+    <div class="health-item">
+      <div class="health-label">CPU</div>
+      <div class="health-bar"><div class="health-bar-fill" id="hCpu" style="width:0%"></div></div>
+    </div>
+    <div class="health-item">
+      <div class="health-label">GPU</div>
+      <div class="health-bar"><div class="health-bar-fill" id="hGpu" style="width:0%"></div></div>
+    </div>
+    <div class="health-item">
+      <div class="health-label">MEM</div>
+      <div class="health-bar"><div class="health-bar-fill" id="hMem" style="width:0%"></div></div>
+    </div>
+    <div class="health-item">
+      <div class="health-label">NET</div>
+      <div class="health-bar"><div class="health-bar-fill" id="hNet" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="footer-divider"></div>
+  <div class="footer-stat">
+    <div class="footer-stat-label">LAP</div>
+    <div class="footer-stat-value" id="ftLap">--/--</div>
+  </div>
+
+  <div class="ws-info">
+    WS: <span id="wsUrlText">not connected</span><br>
+    TEAM AUTONOMISTS · DDU EC
+  </div>
+</div>
+<script>
+
+
+const WS_URL        = "ws://192.168.1.100:9090";  // ◄◄◄ YOUR CAR IP:PORT
+const MAX_SPEED_KMH = 100;   // speedometer arc scale (100 = full arc at 100 km/h)
+const GPS_SCALE_PX  = 5000;  // map zoom: bigger = more zoomed in (pixels per degree)
+const US_WARN_CM    = 60;    // ultrasonic: below this = yellow warning badge
+const US_DANGER_CM  = 30;    // ultrasonic: below this = red danger badge (blinks)
+const OFFSET_MAX_CM = 30;    // lane offset: ±30 cm = pin reaches edge of bar
+
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   2. STATE  — internal runtime variables
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+let ws          = null;    // WebSocket instance
+let wsConnected = false;   // true when car is connected
+
+let gpsRef         = null;  // first GPS fix becomes our map origin
+let gpsTrailPoints = [];    // array of "x,y" strings for the trail line
+
+let uptimeSeconds  = 0;     // increments every second
+let totalDistKm    = 0;     // accumulates from speed
+let lastSpeed      = 0;     // used for distance calculation
+
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   3. WEBSOCKET CONNECTION
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+function connectWebSocket() {
+  try {
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      wsConnected = true;
+      document.getElementById('wsUrlText').textContent = WS_URL;
+      document.getElementById('wsUrlDisplay').textContent = WS_URL;
+      setConnectionBadge('connected', '● CONNECTED');
+      console.log('[HUD] WebSocket connected to', WS_URL);
+    };
+
+    ws.onmessage = (event) => {
+      // Parse the JSON and send it to the router
+      try {
+        const data = JSON.parse(event.data);
+        routeData(data);
+      } catch (err) {
+        console.error('[HUD] JSON parse error:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      wsConnected = false;
+      setConnectionBadge('waiting', '◌ WAITING FOR CAR');
+      console.log('[HUD] WebSocket closed. Retrying in 3s...');
+      setTimeout(connectWebSocket, 3000);  // auto-reconnect
+    };
+
+    ws.onerror = () => {
+      wsConnected = false;
+      setConnectionBadge('disconnected', '✕ NO SIGNAL');
+    };
+
+  } catch (err) {
+    console.warn('[HUD] WebSocket unavailable:', err);
+    setConnectionBadge('disconnected', '✕ WS ERROR');
+  }
+}
+
+function setConnectionBadge(type, text) {
+  const badge = document.getElementById('connBadge');
+  badge.className = 'conn-badge ' + type;
+
+  const dotColor = type === 'connected' ? 'green'
+                 : type === 'waiting'   ? 'cyan'
+                 :                        'red';
+  badge.querySelector('.dot').className = 'dot ' + dotColor;
+  document.getElementById('connText').textContent = text;
+}
+
+
+function routeData(d) {
+  if (d.speed      !== undefined) updateSpeed(d.speed);
+  if (d.steer      !== undefined) updateSteering(d.steer);
+  if (d.offset     !== undefined) updateOffset(d.offset);
+  if (d.klem       !== undefined) updateKlem(d.klem);
+  if (d.mode       !== undefined) updateMode(d.mode);
+  if (d.battery)                  updateBattery(d.battery);
+  if (d.imu)                      updateIMU(d.imu);
+  if (d.ultrasonic)               updateUltrasonic(d.ultrasonic);
+  if (d.gps)                      updateGPS(d.gps);
+  if (d.yolo)                     updateYoloList(d.yolo);
+  if (d.yolo_boxes)               drawYoloBoxes(d.yolo_boxes);
+  if (d.traffic)                  updateTraffic(d.traffic);
+  if (d.v2x)                      updateV2X(d.v2x);
+  if (d.system)                   updateSystemHealth(d.system);
+
+  // Track distance using the speed value (called every ~50ms frame from car)
+  if (d.speed !== undefined) {
+    lastSpeed = d.speed;
+  }
+}
+
+/* ── Speed (km/h) → speedometer arc + bottom bar ── */
+function updateSpeed(speed) {
+  document.getElementById('speedVal').textContent  = Math.round(speed);
+  document.getElementById('ftSpeed').textContent   = Math.round(speed) + ' km/h';
+
+  // Calculate arc endpoint geometry
+  // Arc goes from left (angle=-180°) to right (angle=0°)
+  const pct   = Math.min(speed / MAX_SPEED_KMH, 1);   // 0 to 1
+  const angle = -180 + pct * 180;                      // -180° to 0°
+  const cx = 80, cy = 90, r = 62;
+  const rad = (a) => a * Math.PI / 180;
+  const x = cx + r * Math.cos(rad(angle));
+  const y = cy + r * Math.sin(rad(angle));
+  const largeArc = pct > 0.5 ? 1 : 0;
+
+  document.getElementById('speedArc')
+    .setAttribute('d', `M18 90 A62 62 0 ${largeArc} 1 ${x.toFixed(1)} ${y.toFixed(1)}`);
+}
+
+/* ── Steering angle (degrees, negative=left) → wheel rotation + value ── */
+function updateSteering(angle) {
+  document.getElementById('steerSvg').style.transform = `rotate(${angle}deg)`;
+  document.getElementById('steerVal').textContent =
+    (angle >= 0 ? '+' : '') + angle.toFixed(1) + '°';
+}
+
+/* ── Lane offset (cm, negative=left) → offset bar pin ── */
+function updateOffset(cm) {
+  document.getElementById('offsetVal').textContent =
+    (cm >= 0 ? '+' : '') + cm.toFixed(1) + ' cm';
+
+  // Pin position: 50% = center, range maps ±OFFSET_MAX_CM to ±40% from center
+  const pct = 50 + (cm / OFFSET_MAX_CM) * 40;
+  document.getElementById('offsetPin').style.left =
+    Math.max(5, Math.min(95, pct)) + '%';
+}
+
+/* ── Klem (0 / 15 / 30) → highlight the matching button ── */
+function updateKlem(k) {
+  // Clear all, then light up the active one
+  ['klem0', 'klem15', 'klem30'].forEach(id =>
+    document.getElementById(id).classList.remove('on')
+  );
+  const map = { 0: 'klem0', 15: 'klem15', 30: 'klem30' };
+  if (map[k]) document.getElementById(map[k]).classList.add('on');
+}
+
+/* ── Drive mode ("stop" / "manual" / "auto") → highlight button ── */
+function updateMode(m) {
+  ['modeStop', 'modeManual', 'modeAuto'].forEach(id =>
+    document.getElementById(id).classList.remove('on')
+  );
+  const map = { stop: 'modeStop', manual: 'modeManual', auto: 'modeAuto' };
+  if (map[m]) document.getElementById(map[m]).classList.add('on');
+}
+
+/* ── Battery { pct, voltage, current, temp } ── */
+function updateBattery(b) {
+  if (b.pct !== undefined) {
+    document.getElementById('battPct').textContent    = Math.round(b.pct);
+    document.getElementById('battBar').style.width    = b.pct + '%';
+    document.getElementById('battEst').textContent    = 'EST ' + Math.round(b.pct * 0.54) + ' min';
+  }
+  if (b.voltage !== undefined) {
+    document.getElementById('battVolt').textContent   = b.voltage.toFixed(1) + 'V · ' + (b.ah || '??') + 'Ah';
+  }
+  if (b.current !== undefined) {
+    document.getElementById('battCurr').textContent   = b.current.toFixed(1) + ' A';
+  }
+  if (b.temp !== undefined) {
+    document.getElementById('battTemp').textContent   = b.temp.toFixed(0) + ' °C';
+  }
+}
+
+/* ── IMU { ax, ay, gz, pitch, roll, yaw } ── */
+function updateIMU(imu) {
+  // Helper: format a signed float with unit as HTML (unit in small text)
+  const fmt = (v, unit) =>
+    (v >= 0 ? '+' : '') + v.toFixed(2) + `<span class="imu-unit"> ${unit}</span>`;
+
+  if (imu.ax    !== undefined) document.getElementById('iAx').innerHTML    = fmt(imu.ax,    'g');
+  if (imu.ay    !== undefined) document.getElementById('iAy').innerHTML    = fmt(imu.ay,    'g');
+  if (imu.gz    !== undefined) document.getElementById('iGz').innerHTML    = fmt(imu.gz,    '°/s');
+  if (imu.pitch !== undefined) document.getElementById('iPitch').innerHTML = fmt(imu.pitch, '°');
+  if (imu.roll  !== undefined) document.getElementById('iRoll').innerHTML  = fmt(imu.roll,  '°');
+  if (imu.yaw   !== undefined) {
+    document.getElementById('iYaw').innerHTML = imu.yaw.toFixed(1) + '<span class="imu-unit"> °</span>';
+    // Also update the heading display in the footer
+    updateHeadingDisplay(imu.yaw);
+  }
+}
+
+/* ── Ultrasonic { front, rear, left, right } → colored badges ── */
+function updateUltrasonic(u) {
+  // Returns the CSS class based on distance
+  const badgeClass = (cm) =>
+    cm < US_DANGER_CM ? 'ultra-badge danger'
+  : cm < US_WARN_CM   ? 'ultra-badge warn'
+  :                     'ultra-badge safe';
+
+  // Map from JSON key → element ID → position class
+  const sensors = [
+    { key: 'front', id: 'uFront', pos: 'top'    },
+    { key: 'rear',  id: 'uRear',  pos: 'bottom' },
+    { key: 'left',  id: 'uLeft',  pos: 'left'   },
+    { key: 'right', id: 'uRight', pos: 'right'  },
+  ];
+
+  sensors.forEach(({ key, id, pos }) => {
+    if (u[key] !== undefined) {
+      const el = document.getElementById(id);
+      el.className  = badgeClass(u[key]) + ' ' + pos;
+      el.textContent = Math.round(u[key]);
+    }
+  });
+}
+
+/* ── GPS { lat, lng, alt, sats, hdop } → text + mini-map dot ── */
+function updateGPS(g) {
+  if (g.lat  !== undefined) document.getElementById('gpsLat').textContent  = Math.abs(g.lat).toFixed(4) + '° ' + (g.lat  >= 0 ? 'N' : 'S');
+  if (g.lng  !== undefined) document.getElementById('gpsLng').textContent  = Math.abs(g.lng).toFixed(4) + '° ' + (g.lng  >= 0 ? 'E' : 'W');
+  if (g.alt  !== undefined) document.getElementById('gpsAlt').textContent  = g.alt.toFixed(0)  + ' m';
+  if (g.sats !== undefined) document.getElementById('gpsSats').textContent = g.sats;
+  if (g.hdop !== undefined) document.getElementById('gpsHdop').textContent = g.hdop.toFixed(1);
+
+  if (g.lat && g.lng) {
+    const mapEl = document.querySelector('.gps-map');
+    const mapW  = mapEl.clientWidth;
+    const mapH  = mapEl.clientHeight;
+
+    // Use first received fix as origin (center of map)
+    if (!gpsRef) gpsRef = { lat: g.lat, lng: g.lng };
+
+    // Convert lat/lng delta to pixel position
+    const px = (mapW / 2) + (g.lng - gpsRef.lng) * GPS_SCALE_PX;
+    const py = (mapH / 2) - (g.lat - gpsRef.lat) * GPS_SCALE_PX;
+
+    // Move the car dot
+    const car = document.getElementById('gpsCar');
+    car.style.left = Math.max(5, Math.min(mapW - 5, px)) + 'px';
+    car.style.top  = Math.max(5, Math.min(mapH - 5, py)) + 'px';
+
+    // Append to trail, keep last 60 points
+    gpsTrailPoints.push(`${px.toFixed(0)},${py.toFixed(0)}`);
+    if (gpsTrailPoints.length > 60) gpsTrailPoints.shift();
+    document.getElementById('gpsTrail').setAttribute('points', gpsTrailPoints.join(' '));
+  }
+}
+
+/* ── YOLO detections [ { class, conf, dist } ] → right panel list ── */
+function updateYoloList(detections) {
+  // Emoji map for common classes
+  const icons = {
+    CAR: '🚗', PERSON: '🚶', TRUCK: '🚚', BUS: '🚌',
+    BIKE: '🚲', CONE: '🚧', SIGN: '🛑', LIGHT: '🚦', DOG: '🐕'
+  };
+
+  if (!detections || detections.length === 0) {
+    document.getElementById('yoloList').innerHTML =
+      '<div style="font-family:\'Share Tech Mono\',monospace;font-size:9px;color:rgba(0,240,255,.2);letter-spacing:2px;padding:6px 0;">NO DETECTIONS</div>';
+    return;
+  }
+
+  document.getElementById('yoloList').innerHTML = detections
+    .slice(0, 7)   // show max 7 rows
+    .map(det => {
+      const confClass = det.conf > 0.8 ? 'hi' : det.conf > 0.6 ? 'md' : 'lo';
+      const icon      = icons[det.class.toUpperCase()] || '📦';
+      const distText  = det.dist ? det.dist.toFixed(1) + 'm' : '';
+      return `
+        <div class="yolo-row">
+          <span class="yolo-class">${icon} ${det.class.toUpperCase()}</span>
+          <span class="yolo-dist">${distText}</span>
+          <span class="yolo-conf ${confClass}">${Math.round(det.conf * 100)}%</span>
+        </div>`;
+    }).join('');
+}
+
+/* ── YOLO boxes [ { x, y, w, h, class, conf } ] → drawn on canvas overlay ──
+   x, y, w, h are all normalized 0–1 (fraction of image size)               */
+function drawYoloBoxes(boxes) {
+  const canvas = document.getElementById('yoloCanvas');
+  const feed   = document.getElementById('camFeed');
+  canvas.width  = feed.clientWidth;
+  canvas.height = feed.clientHeight;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Color per class
+  const colors = { CAR: '#00ff88', PERSON: '#ffe100', SIGN: '#00f0ff', DEFAULT: '#ff7700' };
+
+  boxes.forEach(box => {
+    const color = colors[box.class.toUpperCase()] || colors.DEFAULT;
+    const x = box.x * canvas.width;
+    const y = box.y * canvas.height;
+    const w = box.w * canvas.width;
+    const h = box.h * canvas.height;
+
+    // Draw bounding box
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur  = 8;
+    ctx.strokeRect(x, y, w, h);
+
+    // Label background
+    ctx.fillStyle = color + '28';
+    ctx.fillRect(x, y - 18, w, 18);
+
+    // Label text
+    ctx.shadowBlur  = 0;
+    ctx.fillStyle   = color;
+    ctx.font        = 'bold 10px Share Tech Mono, monospace';
+    ctx.fillText(`${box.class.toUpperCase()} ${Math.round((box.conf || 0) * 100)}%`, x + 4, y - 5);
+  });
+}
+
+/* ── Traffic light { state, timer, dist, semaphore } ── */
+function updateTraffic(t) {
+  const state = (t.state || 'green').toLowerCase();
+
+  // Color and shadow per state
+  const config = {
+    green:  { color: 'var(--green)',  shadow: '0 0 12px rgba(0,255,136,.8)',   sem: '0x02 · PROCEED' },
+    yellow: { color: 'var(--yellow)', shadow: '0 0 12px rgba(255,225,0,.8)',   sem: '0x01 · PREPARE' },
+    red:    { color: 'var(--red)',    shadow: '0 0 12px rgba(255,34,85,.8)',    sem: '0x00 · HALT'    },
+  };
+
+  // Turn off all bulbs, then turn on the right one
+  ['sigRed', 'sigYellow', 'sigGreen'].forEach(id =>
+    document.getElementById(id).classList.remove('on')
+  );
+  const bulbId = { green: 'sigGreen', yellow: 'sigYellow', red: 'sigRed' }[state];
+  if (bulbId) document.getElementById(bulbId).classList.add('on');
+
+  const cfg = config[state] || config.green;
+  const stateEl = document.getElementById('sigState');
+  stateEl.textContent   = state.toUpperCase();
+  stateEl.style.color      = cfg.color;
+  stateEl.style.textShadow = cfg.shadow;
+
+  if (t.timer !== undefined) {
+    document.getElementById('sigTimer').textContent = `⏱ ${t.timer} s remaining`;
+  }
+  document.getElementById('sigSem').textContent = `SEM: ${cfg.sem}`;
+  if (t.dist !== undefined) {
+    document.getElementById('sigDist').textContent = `INTERSECT · ${t.dist} m`;
+  }
+}
+
+/* ── V2X messages { signal, vehicle, network, infra } ── */
+function updateV2X(v) {
+  if (v.signal)  document.getElementById('v2xSig').textContent   = v.signal;
+  if (v.vehicle) document.getElementById('v2xVeh').textContent   = v.vehicle;
+  if (v.network) document.getElementById('v2xNet').textContent   = v.network;
+  if (v.infra)   document.getElementById('v2xInfra').textContent = v.infra;
+}
+
+/* ── System health { cpu, gpu, mem, net } → mini bars ── */
+function updateSystemHealth(s) {
+  if (s.cpu !== undefined) document.getElementById('hCpu').style.width = s.cpu + '%';
+  if (s.gpu !== undefined) document.getElementById('hGpu').style.width = s.gpu + '%';
+  if (s.mem !== undefined) document.getElementById('hMem').style.width = s.mem + '%';
+  if (s.net !== undefined) document.getElementById('hNet').style.width = s.net + '%';
+}
+
+/* ── Heading display (called from updateIMU when yaw arrives) ── */
+function updateHeadingDisplay(yaw) {
+  const deg       = ((yaw % 360) + 360) % 360;
+  const compass   = ['N','NE','E','SE','S','SW','W','NW'];
+  const direction = compass[Math.round(deg / 45) % 8];
+  document.getElementById('ftHeading').textContent = Math.round(deg) + '° ' + direction;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   6. CLOCK — ticks every second regardless of WS status
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+setInterval(() => {
+  // Wall clock
+  document.getElementById('sysTime').textContent =
+    new Date().toTimeString().slice(0, 8);
+
+  // Uptime counter (only when connected)
+  if (wsConnected) {
+    uptimeSeconds++;
+
+    // Accumulate distance: speed(km/h) * (1/3600)h per second = km
+    totalDistKm += lastSpeed / 3600;
+
+    // Format uptime as HH:MM:SS
+    const h = String(Math.floor(uptimeSeconds / 3600)).padStart(2, '0');
+    const m = String(Math.floor((uptimeSeconds % 3600) / 60)).padStart(2, '0');
+    const s = String(uptimeSeconds % 60).padStart(2, '0');
+    document.getElementById('ftUptime').textContent = `${h}:${m}:${s}`;
+    document.getElementById('ftDist').textContent   = totalDistKm.toFixed(2) + ' km';
+  }
+
+}, 1000);
+
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   7. INIT — kick everything off
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+// Show the WS URL in the camera placeholder
+document.getElementById('wsUrlDisplay').textContent = WS_URL;
+
+// Resize YOLO canvas when window resizes
+window.addEventListener('resize', () => {
+  const canvas = document.getElementById('yoloCanvas');
+  const feed   = document.getElementById('camFeed');
+  canvas.width  = feed.clientWidth;
+  canvas.height = feed.clientHeight;
+});
+
+// Connect to the car
+connectWebSocket();
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   QUICK REFERENCE — JSON your car must send (at ~20 Hz):
+
+   {
+     "speed":   32.4,          // km/h
+     "steer":   12.5,          // degrees, negative = left
+     "offset":  4.2,           // cm from lane center, negative = left
+     "klem":    15,            // 0 / 15 / 30
+     "mode":    "auto",        // "stop" / "manual" / "auto"
+     "battery": { "pct":78, "voltage":12.4, "current":2.4, "temp":34 },
+     "imu":     { "ax":0.12, "ay":-0.04, "gz":2.3, "pitch":1.4, "roll":0.8, "yaw":247 },
+     "ultrasonic": { "front":148, "rear":312, "left":42, "right":88 },
+     "gps":     { "lat":23.0225, "lng":72.5714, "alt":53, "sats":11, "hdop":0.8 },
+     "yolo":    [ { "class":"CAR", "conf":0.94, "dist":12.4 } ],
+     "yolo_boxes": [ { "x":0.22, "y":0.28, "w":0.14, "h":0.22, "class":"CAR", "conf":0.94 } ],
+     "traffic": { "state":"green", "timer":18, "dist":38 },
+     "v2x":     { "signal":"...", "vehicle":"...", "network":"...", "infra":"..." },
+     "system":  { "cpu":62, "gpu":78, "mem":55, "net":90 }
+   }
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+</script>
+</body>
+</html>
